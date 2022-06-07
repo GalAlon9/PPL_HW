@@ -16,24 +16,54 @@ export function makeTableService<T>(sync: (table?: Table<T>) => Promise<Table<T>
         get(key: string): Promise<T> {
             return sync()
             .then((data) =>{
-                if (key in data) return data[key];
+                if (key in data) return data[key]
                 else return Promise.reject(MISSING_KEY)
             })
-            .catch((err)=> Promise.reject("something went wrong:"+ String(err)))
-            
+            .catch(()=> Promise.reject(MISSING_KEY))
         },
+        
         set(key: string, val: T): Promise<void> {
-            return Promise.reject('not implemented')
+            return sync()
+            .then((data)=>{
+                let t = {}
+                t = Object.keys(data).map((k)=>({[k]:data[k]}))
+                t as Table<T>
+                sync(t)
+            })
+            .catch(()=> Promise.reject(MISSING_KEY))
         },
+
+       
+        
         delete(key: string): Promise<void> {
-            return Promise.reject('not implemented')
-        }
+            return sync()
+            .then((data)=>{
+                if (key in data){
+                    let t = {}
+                    t = Object.keys(data).filter((x)=>x!=key).map((k)=>({[k]:data[k]}))
+                    t as Table<T>
+                    sync(t)
+                }
+                else return Promise.reject(MISSING_KEY)
+            })
+            .catch(()=> Promise.reject(MISSING_KEY))
     }
 }
+}
+
+
+
 
 // Q 2.1 (b)
 export function getAll<T>(store: TableService<T>, keys: string[]): Promise<T[]> {
-    return Promise.reject('not implemented')
+    const list: T[] = []
+    for (var key in keys){
+        store.get(key).then((value)=>{
+            list.push(value)
+        })
+        .catch(()=>{return Promise.reject(MISSING_KEY)})
+    }
+    return Promise.resolve(list)
 }
 
 
@@ -48,14 +78,15 @@ export function isReference<T>(obj: T | Reference): obj is Reference {
 
 export async function constructObjectFromTables(tables: TableServiceTable, ref: Reference) {
     async function deref(ref: Reference) {
+        const t = ref.table
+        const k = ref.key
+        if (Object.entries(tables).find(t => t[0] === ref.table)) 
         return Promise.reject('not implemented')
     }
-
     return deref(ref)
 }
 
 // Q 2.3
-
 export function lazyProduct<T1, T2>(g1: () => Generator<T1>, g2: () => Generator<T2>): () => Generator<[T1, T2]> {
     return function* () {
         // TODO implement!
