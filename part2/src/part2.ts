@@ -14,39 +14,63 @@ export function makeTableService<T>(sync: (table?: Table<T>) => Promise<Table<T>
     // optional initialization code
     return {
         get(key: string): Promise<T> {
-            return sync()
-            .then((data) =>{
-                if (key in data) return data[key]
-                else return Promise.reject(MISSING_KEY)
+            return new Promise(function(resolve,reject){
+                sync()
+                .then((data)=>{
+                    if (key in data)  resolve(data[key])
+                    else reject(MISSING_KEY)
+                })
+                .catch((err)=>console.error('something went wrong: ',err))
             })
-            .catch(()=> Promise.reject(MISSING_KEY))
+
+           
         },
         
         set(key: string, val: T): Promise<void> {
-            return sync()
-            .then((data)=>{
-                let t = {}
-                t = Object.keys(data).map((k)=>({[k]:data[k]}))
-                t as Table<T>
-                sync(t)
+            return new Promise(function(resolve,reject){
+                sync()
+                .then((data)=>{
+                    let t : Record<string,Readonly<T>> = data
+                    t[key] = val
+                    t as Table<T>
+                    sync(t)
+                        .then(()=>(resolve()))
+                        .catch((err)=>console.error('something went wrong: ',err))
+                })
+                .catch((err)=>console.error('something went wrong: ',err))
             })
-            .catch(()=> Promise.reject(MISSING_KEY))
+           
         },
 
        
         
         delete(key: string): Promise<void> {
-            return sync()
-            .then((data)=>{
-                if (key in data){
-                    let t = {}
-                    t = Object.keys(data).filter((x)=>x!=key).map((k)=>({[k]:data[k]}))
+
+            return new Promise(function(resolve,reject){
+                sync()
+                .then((data)=>{
+                    let t : Record<string,Readonly<T>> = data
+                    if(key in t) delete t[key]
+                    else reject (MISSING_KEY)
                     t as Table<T>
                     sync(t)
-                }
-                else return Promise.reject(MISSING_KEY)
+                        .then(()=>(resolve()))
+                        .catch((err)=>console.error('something went wrong: ',err))
+                })
+                .catch((err)=>console.error('something went wrong: ',err))
             })
-            .catch(()=> Promise.reject(MISSING_KEY))
+
+            // return sync()
+            // .then((data)=>{
+            //     if (key in data){
+            //         let t = {}
+            //         t = Object.keys(data).filter((x)=>x!=key).map((k)=>({[k]:data[k]}))
+            //         t as Table<T>
+            //         sync(t)
+            //     }
+            //     else return Promise.reject(MISSING_KEY)
+            // })
+            // .catch(()=> Promise.reject(MISSING_KEY))
     }
 }
 }
@@ -56,14 +80,28 @@ export function makeTableService<T>(sync: (table?: Table<T>) => Promise<Table<T>
 
 // Q 2.1 (b)
 export function getAll<T>(store: TableService<T>, keys: string[]): Promise<T[]> {
-    const list: T[] = []
-    for (var key in keys){
-        store.get(key).then((value)=>{
-            list.push(value)
-        })
-        .catch(()=>{return Promise.reject(MISSING_KEY)})
-    }
-    return Promise.resolve(list)
+    return new Promise(function(resolve,reject){
+        const list: T[] = []
+        let count = 0
+        let len = keys.length
+        for (var key in keys){
+            store.get(key)
+                .then((value)=>{
+                    list.push(value)
+                    count++
+                    if(count ===len)resolve(list)
+                })
+                .catch((err)=>(err===MISSING_KEY?reject(MISSING_KEY):''))
+        }
+    })
+    // const list: T[] = []
+    // for (var key in keys){
+    //     store.get(key).then((value)=>{
+    //         list.push(value)
+    //     })
+    //     .catch(()=>{return Promise.reject(MISSING_KEY)})
+    // }
+    // return Promise.resolve(list)
 }
 
 
