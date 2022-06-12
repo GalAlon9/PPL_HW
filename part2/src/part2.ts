@@ -89,7 +89,7 @@ export function getAll<T>(store: TableService<T>, keys: string[]): Promise<T[]> 
                 .then((value)=>{
                     list.push(value)
                     count++
-                    if(count ===len)resolve(list)
+                    if(count === len)resolve(list)
                 })
                 .catch((err)=>(err===MISSING_KEY?reject(MISSING_KEY):''))
         }
@@ -127,13 +127,23 @@ export async function constructObjectFromTables(tables: TableServiceTable, ref: 
 // Q 2.3
 export function lazyProduct<T1, T2>(g1: () => Generator<T1>, g2: () => Generator<T2>): () => Generator<[T1, T2]> {
     return function* () {
-        // TODO implement!
+
+        // while(true){
+        //     let a = g1().next()
+        //     if(a.done) break
+        //     while(true){
+        //         let b = g2().next()
+        //         if(b.done) break
+        //         yield [a.value,b.value]
+        //     }
+        // }
+        
     }
 }
 
 export function lazyZip<T1, T2>(g1: () => Generator<T1>, g2: () => Generator<T2>): () => Generator<[T1, T2]> {
     return function* () {
-        // TODO implement!
+        
     }
 }
 
