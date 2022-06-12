@@ -1,0 +1,28 @@
+Typing rule set!:
+(set! var val)
+   If type<var>(tenv) = t1
+      type<val>(tenv) = t2
+   then 
+        type<(set! var texp) val)>(tenv) = void
+        replace type<(var)>(tenv) from t1 to t2
+
+
+
+Typing rule quote:
+( quote <sexp> ) 
+type<(quote <sexp>)>(tenv) = 
+
+
+
+
+
+
+
+// Purpose: compute the type of an app-exp
+// Typing rule:
+// If   type<rator>(tenv) = (t1*..*tn -> t)
+//      type<rand1>(tenv) = t1
+//      ...
+//      type<randn>(tenv) = tn
+// then type<(rator rand1...randn)>(tenv) = t
+// We also check the correct number of arguments is passed.

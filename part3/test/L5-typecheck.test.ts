@@ -166,6 +166,7 @@ describe('L5 Type Checker', () => {
         it('checkEqualType knows about any and subtypes across records and UD types', () => {
             mapv(pp, (p: Program) => {
                 const c1 = checkEqualType(R1, UD, p.exps[2], p);
+                console.log(c1);
                 expect(c1).toSatisfy(isOkT(isUserDefinedNameTExp));
                 mapv(c1, (ud) => expect(ud).toStrictEqual(UD));
 
