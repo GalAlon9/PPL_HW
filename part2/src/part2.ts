@@ -20,7 +20,7 @@ export function makeTableService<T>(sync: (table?: Table<T>) => Promise<Table<T>
                     if (key in data)  resolve(data[key])
                     else reject(MISSING_KEY)
                 })
-                .catch((err)=>console.error('something went wrong: ',err))
+                .catch((err)=>console.error(MISSING_KEY))
             })
 
            
@@ -60,17 +60,7 @@ export function makeTableService<T>(sync: (table?: Table<T>) => Promise<Table<T>
                 .catch((err)=>console.error('something went wrong: ',err))
             })
 
-            // return sync()
-            // .then((data)=>{
-            //     if (key in data){
-            //         let t = {}
-            //         t = Object.keys(data).filter((x)=>x!=key).map((k)=>({[k]:data[k]}))
-            //         t as Table<T>
-            //         sync(t)
-            //     }
-            //     else return Promise.reject(MISSING_KEY)
-            // })
-            // .catch(()=> Promise.reject(MISSING_KEY))
+            
     }
 }
 }
@@ -81,35 +71,12 @@ export function makeTableService<T>(sync: (table?: Table<T>) => Promise<Table<T>
 // Q 2.1 (b)
 export function getAll<T>(store: TableService<T>, keys: string[]): Promise<T[]> {
     return new Promise(function(resolve,reject){
-        // const list: T[] = []
-        // let count = 0
-        // let len = keys.length
-        // for (var key in keys){
-        //     store.get(key)
-        //         .then((value)=>{
-        //             list.push(value)
-        //             count++
-        //             if(count === len)resolve(list)
-        //         })
-        //         .catch((err)=>(err===MISSING_KEY?reject(MISSING_KEY):''))
-        // }
+       
         let list : Promise<T>[] = keys.map((k) => store.get(k))
         Promise.all(list)
         .then((res)=>resolve(res))
         .catch(() =>reject(MISSING_KEY))
     })
-    // let promisearray : Promise<T>[] = keys.map((key) => store.get(key))
-    //         Promise.all(promisearray).then((res) => resolve(res)).catch((err)=> reject(err))
-    //     }) 
-
-    // const list: T[] = []
-    // for (var key in keys){
-    //     store.get(key).then((value)=>{
-    //         list.push(value)
-    //     })
-    //     .catch(()=>{return Promise.reject(MISSING_KEY)})
-    // }
-    // return Promise.resolve(list)
 }
 
 
