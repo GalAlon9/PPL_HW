@@ -71,7 +71,6 @@ export function makeTableService<T>(sync: (table?: Table<T>) => Promise<Table<T>
 // Q 2.1 (b)
 export function getAll<T>(store: TableService<T>, keys: string[]): Promise<T[]> {
     return new Promise(function(resolve,reject){
-       
         let list : Promise<T>[] = keys.map((k) => store.get(k))
         Promise.all(list)
         .then((res)=>resolve(res))
@@ -91,10 +90,23 @@ export function isReference<T>(obj: T | Reference): obj is Reference {
 
 export async function constructObjectFromTables(tables: TableServiceTable, ref: Reference) {
     async function deref(ref: Reference) {
-        const t = ref.table
-        const k = ref.key
-        if (Object.entries(tables).find(t => t[0] === ref.table)) 
-        return Promise.reject('not implemented')
+       if(ref.table in tables){
+        try {
+            const entries = Object.entries(await tables[ref.table].get(ref.key))
+            for (let i = 0; i < entries.length; i++) {
+                const entry = entries[i][1]
+                if (isReference(entry))
+                    entries[i][1] = await deref(entry)
+            }
+            return Object.fromEntries(entries) // Reconstructs the table
+            }
+           catch {
+            return Promise.reject(MISSING_KEY);
+            }
+       }
+       else{
+        return Promise.reject(MISSING_TABLE_SERVICE)
+       }
     }
     return deref(ref)
 }
@@ -102,23 +114,25 @@ export async function constructObjectFromTables(tables: TableServiceTable, ref: 
 // Q 2.3
 export function lazyProduct<T1, T2>(g1: () => Generator<T1>, g2: () => Generator<T2>): () => Generator<[T1, T2]> {
     return function* () {
-
-        // while(true){
-        //     let a = g1().next()
-        //     if(a.done) break
-        //     while(true){
-        //         let b = g2().next()
-        //         if(b.done) break
-        //         yield [a.value,b.value]
-        //     }
-        // }
-        
+        for(let a of g1()){
+            for(let b of g2()){
+                yield[a,b]
+            }
+        }        
     }
 }
 
 export function lazyZip<T1, T2>(g1: () => Generator<T1>, g2: () => Generator<T2>): () => Generator<[T1, T2]> {
     return function* () {
-        
+        const a = g1()
+        const b = g2()
+        let iter1 = a.next()
+        let iter2 = b.next()
+        while(!iter1.done&&!iter2.done){
+            yield[iter1.value,iter2.value]
+            iter1 = a.next()
+            iter2  = b.next()   
+        }
     }
 }
 
@@ -131,12 +145,31 @@ export type ReactiveTableService<T> = {
 }
 
 export async function makeReactiveTableService<T>(sync: (table?: Table<T>) => Promise<Table<T>>, optimistic: boolean): Promise<ReactiveTableService<T>> {
-    // optional initialization code
-
+    
     let _table: Table<T> = await sync()
+    let subs:((table: Table<T>) => void)[] = []
 
     const handleMutation = async (newTable: Table<T>) => {
-        // TODO implement!
+       if(optimistic){
+            try{
+                subs.map((obs)=>obs(newTable))
+                _table = await sync(newTable)
+            }
+            catch(err){
+                subs.map((obs)=>obs(_table))
+                return Promise.reject(err)
+            }
+       }
+       else{
+            try{
+                _table = await sync(newTable)
+                subs.map((obs)=>obs(newTable))
+            }
+            catch(err){
+                subs.map((obs)=>obs(_table))
+                return Promise.reject(err)
+            }
+       }
     }
     return {
         get(key: string): T {
@@ -147,14 +180,22 @@ export async function makeReactiveTableService<T>(sync: (table?: Table<T>) => Pr
             }
         },
         set(key: string, val: T): Promise<void> {
-            return handleMutation(null as any /* TODO */)
+            let tableCopy : Record<string,Readonly<T>> = Object.fromEntries(Object.entries(_table))
+            tableCopy[key] = val
+            return handleMutation(tableCopy)
         },
         delete(key: string): Promise<void> {
-            return handleMutation(null as any /* TODO */)
+            let tableCopy: Record<string, Readonly<T>> = Object.fromEntries(Object.entries(_table))
+            if (key in _table){
+                delete tableCopy[key]
+                return handleMutation(tableCopy)
+            }
+            throw MISSING_KEY
+            
         },
 
         subscribe(observer: (table: Table<T>) => void): void {
-            // TODO implement!
+            subs.push(observer)
         }
     }
 }

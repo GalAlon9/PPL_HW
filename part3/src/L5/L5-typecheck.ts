@@ -1,4 +1,4 @@
-// L5-typecheck
+// L5-typecheckT
 // ========================================================
 import { equals, filter, flatten, includes, map, intersection, zipWith, reduce } from 'ramda';
 import { isAppExp, isBoolExp, isDefineExp, isIfExp, isLetrecExp, isLetExp, isNumExp,
@@ -111,10 +111,11 @@ export const getParentsType = (te: TExp, p: Program): TExp[] =>
 
 // L51
 // Get the list of types that cover all ts in types.
-export const coverTypes = (types: TExp[], p: Program): TExp[] => 
+export const coverTypes = (types: TExp[], p: Program): TExp[] =>  {
     // [[p11, p12], [p21], [p31, p32]] --> types in intersection of all lists
-    ((parentsList: TExp[][]): TExp[] => reduce(intersection, first(parentsList), rest(parentsList)))
-     (map((t) => getParentsType(t,p), types));
+    const parentsList : TExp[][] = map((t) => getParentsType(t,p), types);
+    return reduce<TExp[], TExp[]>(intersection, first(parentsList), rest(parentsList));
+}
 
 // Return the most specific in a list of TExps
 // For example given UD(R1, R2):
@@ -380,12 +381,25 @@ export const typeofDefineType = (exp: DefineTypeExp, _tenv: TEnv, _p: Program): 
     makeFailure(`Todo ${JSON.stringify(exp, null, 2)}`);
 
 // TODO L51
-export const typeofSet = (exp: SetExp, _tenv: TEnv, _p: Program): Result<TExp> =>
-    makeFailure(`Todo ${JSON.stringify(exp, null, 2)}`);
+export const typeofSet = (exp: SetExp, _tenv: TEnv, _p: Program): Result<TExp> =>{
+    const val = exp.val;
+    const constraint = typeofExp(val, _tenv, _p);    
+    return mapv(constraint, (_) => makeVoidTExp());
+}
+
+    /*Example: typeofLet
+     const vars = map((b) => b.var.var, exp.bindings);
+    const vals = map((b) => b.val, exp.bindings);
+    const varTEs = map((b) => b.var.texp, exp.bindings);
+    const constraints = zipWithResult((varTE, val) => bind(typeofExp(val, tenv, p), (typeOfVal: TExp) => 
+                                                            checkEqualType(varTE, typeOfVal, exp, p)),
+                                      varTEs, vals);
+    return bind(constraints, _ => typeofExps(exp.body, makeExtendTEnv(vars, varTEs, tenv), p));
+    */
 
 // TODO L51
 export const typeofLit = (exp: LitExp, _tenv: TEnv, _p: Program): Result<TExp> =>
-    makeFailure(`Todo ${JSON.stringify(exp, null, 2)}`);
+    typeofExp(exp.val as Parsed,_tenv,_p)
 
 // TODO: L51
 // Purpose: compute the type of a type-case
