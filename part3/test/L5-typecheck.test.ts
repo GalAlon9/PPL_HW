@@ -349,10 +349,10 @@ describe('L5 Type Checker', () => {
             const ptc = parseL51(tc1);
             expect(ptc).toSatisfy(isOkT(isProgram));
             mapv(ptc, (p: Program) => {
-                // console.log(`Parsed program ${JSON.stringify(p, null, 2)}`);
+                //console.log(`Parsed program ${JSON.stringify(p, null, 2)}`);
                 const t = typeofProgram(p, initTEnv(p), p);
                 expect(t).toSatisfy(isOkT(isTExp));
-                // console.log(`Analyzed type ${JSON.stringify(t, null, 2)}`);
+                //console.log(`Analyzed type ${JSON.stringify(t, null, 2)}`);
                 mapv(t, (t1: TExp) => {
                     expect(t1).toStrictEqual(circle);
                 })                

@@ -5,7 +5,7 @@ import { isAppExp, isBoolExp, isDefineExp, isIfExp, isLetrecExp, isLetExp, isNum
          isPrimOp, isProcExp, isProgram, isStrExp, isVarRef, unparse, parseL51,
          AppExp, BoolExp, DefineExp, Exp, IfExp, LetrecExp, LetExp, NumExp, SetExp, LitExp,
          Parsed, PrimOp, ProcExp, Program, StrExp, isSetExp, isLitExp, 
-         isDefineTypeExp, isTypeCaseExp, DefineTypeExp, TypeCaseExp, CaseExp } from "./L5-ast";
+         isDefineTypeExp, isTypeCaseExp, DefineTypeExp, TypeCaseExp, CaseExp, VarDecl } from "./L5-ast";
 import { applyTEnv, makeEmptyTEnv, makeExtendTEnv, TEnv } from "./TEnv";
 import { isProcTExp, makeBoolTExp, makeNumTExp, makeProcTExp, makeStrTExp, makeVoidTExp,
          parseTE, unparseTExp, Record,
@@ -15,6 +15,7 @@ import { isProcTExp, makeBoolTExp, makeNumTExp, makeProcTExp, makeStrTExp, makeV
 import { isEmpty, allT, first, rest, cons } from '../shared/list';
 import { Result, makeFailure, bind, makeOk, zipWithResult, mapv, mapResult, isFailure, either, isOk } from '../shared/result';
 import { ExtEnv, makeExtEnv } from './L5-env';
+import { env } from 'process';
 
 // L51
 export const getTypeDefinitions = (p: Program): UserDefinedTExp[] => {
@@ -180,30 +181,29 @@ export const checkCoverType = (types: TExp[], p: Program): Result<TExp> => {
 // * Type of global variables (define expressions at top level of p)
 // * Type of implicitly defined procedures for user defined types (define-type expressions in p)
 export const initTEnv = (p: Program): TEnv =>{
-    let env:TEnv = makeEmptyTEnv()
-    const UD = getRecords(p)
-    const user_definitions = getTypeDefinitions(p)
-    const definitions = getDefinitions(p)
-    let vars : string[] =[]
-    let tExps :ProcTExp[] =[]
-    for(const ud of user_definitions){
-        vars.push(`${ud.typeName}?`)
-        vars.push(`make-${ud.typeName}`)
-        tExps.push(makeProcTExp([makeAnyTExp()],makeBoolTExp())) 
-        let records = ud.records
-        for(let i=0; i<records.length; i++){
-            let record = records[i]
-            vars.push(`${record.typeName}?`)
-            vars.push(`make-${record.typeName}`)
-            tExps.push(makeProcTExp([makeAnyTExp()],makeBoolTExp())) 
-            const res = getTypeByName(record.typeName,p)
-            if(isFailure(res)) return env;
-            tExps.push(makeProcTExp(record.fields.map((field) => field.te),res.value))
+    let env : TEnv  = makeEmptyTEnv()
+        for(const UD of getTypeDefinitions(p))
+        {
+            let vars: string[] = [`${UD.typeName}?`], texps: TExp[] = [makeProcTExp([makeAnyTExp()], makeBoolTExp())];
+            for (const record of UD.records) {
+                const res = getTypeByName(record.typeName, p);
+                if (isFailure(res)) return env;
+                vars.push(`${record.typeName}?`);
+                vars.push(`make-${record.typeName}`);
+                texps.push(makeProcTExp([makeAnyTExp()], makeBoolTExp()));
+                texps.push(makeProcTExp(map((field: Field): TExp => field.te, record.fields), res.value));
+            }
+            env = makeExtendTEnv(vars, texps, env)
         }
-    }
-    env = makeExtendTEnv(vars,tExps,env)
-    return env
+        for(const def of getDefinitions(p)){
+            const resT = typeofExp(def.val, env, p);
+            if (isFailure(resT)) 
+                return env;
+            env = makeExtendTEnv([def.var.var], [resT.value], env)
+        }
+        return env;
 }
+
 
 
 
@@ -215,13 +215,11 @@ const checkUserDefinedTypes = (p: Program): Result<true> =>{
     const typeDefinitions = getTypeDefinitions(p);
     for (const typeDef of typeDefinitions) {
         let isThereBaseCase = false;
-        let baseCase = false
-        let isRecursive = true;
         for (const record1 of typeDef.records) {
             const sameNames = reduce((recordsList: Record[], record2) =>
                 record2.typeName === record1.typeName ? recordsList.concat([record2]) : recordsList, [], records);
             for (const otherRecord of sameNames) {
-                let isBase = true;
+                
                 if (record1.fields.length !== otherRecord.fields.length)
                     return makeFailure("error: there is a record with two non-identical definitions");
                 for (let i = 0; i < record1.fields.length; i++) {
@@ -253,7 +251,6 @@ const checkTypeCase = (tc: TypeCaseExp, p: Program): Result<true> => {
         if (recordRes.value.fields.length !== _case.varDecls.length)
             return makeFailure("error: wrong number of arguments to record")
         const idx = records.indexOf(recordRes.value);
-        
         if (idx === -1)
             return makeFailure("error: there is an incompatible record");
         isFound[idx] = true;
@@ -360,11 +357,23 @@ export const typeofIf = (ifExp: IfExp, tenv: TEnv, p: Program): Result<TExp> => 
     const thenTE = typeofExp(ifExp.then, tenv, p);
     const altTE = typeofExp(ifExp.alt, tenv, p);
     const constraint1 = bind(testTE, testTE => checkEqualType(testTE, makeBoolTExp(), ifExp, p));
+    //thenTeE can be sub type of altTE
     const constraint2 = bind(thenTE, (thenTE: TExp) =>
                             bind(altTE, (altTE: TExp) =>
                                 checkEqualType(thenTE, altTE, ifExp, p)));
-    return bind(constraint1, (_c1) => constraint2);
-};
+    //altTE can be sub type of thenTeE
+    const constraint3 = bind(thenTE, (thenTE: TExp) =>
+                            bind(altTE, (altTE: TExp) =>
+                                    checkEqualType(altTE, thenTE, ifExp, p)));
+    if(isOk(constraint1)){
+        if(isOk(constraint2)){
+            return constraint2;
+        }
+        else return constraint3;
+    }
+    else return constraint1;
+};  
+
 
 // Purpose: compute the type of a proc-exp
 // Typing rule:
@@ -471,8 +480,21 @@ export const typeofProgram = (exp: Program, tenv: TEnv, p: Program): Result<TExp
 
 // TODO L51
 // Write the typing rule for DefineType expressions
-export const typeofDefineType = (exp: DefineTypeExp, _tenv: TEnv, _p: Program): Result<TExp> =>
-    makeFailure(`Todo ${JSON.stringify(exp, null, 2)}`);
+export const typeofDefineType = (exp: DefineTypeExp, _tenv: TEnv, _p: Program): Result<TExp> =>{
+    let saintyCheck :Result<true> = checkUserDefinedTypes(_p);
+    if(!isOk(saintyCheck)) return saintyCheck;
+    let types : TExp[] = [];
+    let records : Record[] = exp.udType.records;
+    for(const record of records){
+        let fields :Field[] = record.fields;
+        for(const field of fields){
+            types.push(field.te);
+        }
+    }
+    let res : Result<TExp> = makeOk(makeProcTExp(types,makeVoidTExp()));
+    return res;
+}
+    
 
 // TODO L51
 export const typeofSet = (exp: SetExp, _tenv: TEnv, _p: Program): Result<TExp> =>{
@@ -506,5 +528,59 @@ export const typeofLit = (exp: LitExp, _tenv: TEnv, _p: Program): Result<TExp> =
 //   ( type-case id val (record_1 (field_11 ... field_1r1) body_1)...  )
 //  TODO
 export const typeofTypeCase = (exp: TypeCaseExp, tenv: TEnv, p: Program): Result<TExp> => {
-    return makeFailure(`TODO: typecase ${JSON.stringify(exp, null, 2)}`);
+    let sanityCheck = checkTypeCase(exp,p)
+    if(isFailure(sanityCheck))
+        sanityCheck
+    const types: TExp[] = [];
+    const udTypeRes = getUserDefinedTypeByName(exp.typeName, p);
+    const recordTypeRes = getRecordByName(exp.typeName, p)
+    if (isFailure(udTypeRes)){
+        if(isFailure(recordTypeRes)) 
+            return makeFailure("error: couldn't find user defined type or record");
+        else{//type-case record
+
+            const caseArray: CaseExp[] = exp.cases;
+            const records = getRecords(p);
+            for(let i =0;i<caseArray.length;i++){
+                const c = caseArray[i];
+                const recordType = getRecordByName(c.typeName,p)
+                console.log(c.typeName)
+                if(isFailure(recordType)){
+                    return makeFailure("error: couldn't find record");
+                }
+                const newTEnv = makeExtendTEnv(map((varDecl: VarDecl) => varDecl.var, c.varDecls),
+                        map((field: Field) => field.te, recordType.value.fields), tenv);
+                const res = typeofExps(c.body, newTEnv, p);
+                if (isFailure(res))
+                    return res;
+                types.push(res.value);
+            }
+            
+            }
+            return checkCoverType(types, p);
+        }
+    else{//type-case UD
+    const udType = udTypeRes.value;
+    const numOfRecords = udType.records.length
+    const recordsArr: number[] = Array(numOfRecords).fill(0);
+    for (let i=0; i<exp.cases.length;i++) {
+        let _case = exp.cases[i]
+        const recordTypeRes = getRecordByName(_case.typeName, p);
+        if (isFailure(recordTypeRes)) 
+            return makeFailure("error: couldn't find record");
+        if (!udType.records.includes(recordTypeRes.value))
+            return makeFailure("error: user defined type isn't including record");
+        const newTEnv = makeExtendTEnv(map((varDecl: VarDecl) => varDecl.var, _case.varDecls),
+            map((field: Field) => field.te, recordTypeRes.value.fields), tenv);
+        const res = typeofExps(_case.body, newTEnv, p);
+        if (isFailure(res)) 
+            return res;
+        types.push(res.value);
+        recordsArr[i]++
+        }
+     if(!recordsArr.every((n)=>n==1)){
+         return makeFailure("error: missing/extra cases in type-case")
+     }
+    }
+    return checkCoverType(types, p);
 }
